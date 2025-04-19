@@ -1,0 +1,975 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zindal University Life Simulator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;500&display=swap');
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(180deg, #1C2526 0%, #121212 100%);
+            color: #E0E0E0;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+        .background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        .particles {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: url('https://www.transparenttextures.com/patterns/stardust.png') repeat;
+            opacity: 0.2;
+            animation: drift 30s linear infinite;
+        }
+        @keyframes drift {
+            0% { background-position: 0 0; }
+            100% { background-position: 1000px 1000px; }
+        }
+        .header {
+            background: #1E1E1E;
+            color: #FFFFFF;
+            padding: 12px;
+            text-align: center;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .header h1 {
+            font-size: 1.4em;
+            font-weight: 500;
+            margin: 0;
+        }
+        .settings-icon, .hamburger {
+            position: absolute;
+            top: 16px;
+            cursor: pointer;
+            font-size: 1.2em;
+            color: #E0E0E0;
+            transition: transform 0.3s;
+        }
+        .settings-icon:hover, .hamburger:hover {
+            transform: scale(1.1);
+        }
+        .settings-icon { right: 16px; }
+        .hamburger { left: 16px; }
+        .clock {
+            position: fixed;
+            top: 12px;
+            right: 48px;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            overflow: hidden;
+            background: #1E1E1E;
+        }
+        .clock::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #4A90E2;
+            transform: rotate(0deg);
+            transform-origin: center;
+            animation: rotateClock 20s linear infinite;
+        }
+        @keyframes rotateClock {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .sidebar {
+            width: 240px;
+            background: #1E1E1E;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            height: calc(100% - 60px);
+            padding: 16px;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.3);
+            display: none;
+            transition: transform 0.3s ease;
+            transform: translateX(-100%);
+        }
+        .sidebar.active {
+            display: block;
+            transform: translateX(0);
+        }
+        .sidebar a {
+            display: block;
+            padding: 12px;
+            color: #E0E0E0;
+            text-decoration: none;
+            margin-bottom: 8px;
+            font-weight: 300;
+            border-radius: 8px;
+            transition: background 0.3s;
+        }
+        .sidebar a:hover {
+            background: #D4A017;
+            color: #1E1E1E;
+        }
+        .container {
+            max-width: 800px;
+            margin: 80px auto 80px;
+            padding: 24px;
+            background: #1E1E1E;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid #7B1FA2;
+            transition: opacity 0.3s ease;
+        }
+        .dashboard {
+            margin-bottom: 24px;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            gap: 16px;
+        }
+        .stat-card {
+            background: linear-gradient(145deg, #1E1E1E, #2E2E2E);
+            padding: 16px;
+            border-radius: 10px;
+            width: 180px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid #7B1FA2;
+        }
+        .stat-card i {
+            color: #D4A017;
+            margin-right: 8px;
+            transition: transform 0.3s;
+        }
+        .stat-card i:hover {
+            transform: scale(1.2);
+        }
+        .progress {
+            width: 100%;
+            height: 8px;
+            background: #2E2E2E;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+        .progress-health .progress-bar { background: #4A90E2; }
+        .progress-happiness .progress-bar { background: #D4A017; }
+        .progress-wealth .progress-bar { background: #7B1FA2; }
+        .progress-knowledge .progress-bar { background: #26A69A; }
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        button {
+            padding: 12px;
+            font-size: 1em;
+            font-weight: 500;
+            cursor: pointer;
+            background: #4A90E2;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(74, 144, 226, 0.4);
+        }
+        select, input[type="text"] {
+            padding: 12px;
+            margin: 12px;
+            font-size: 1em;
+            font-weight: 300;
+            width: 240px;
+            border: 1px solid #7B1FA2;
+            border-radius: 8px;
+            background: #2E2E2E;
+            color: #E0E0E0;
+        }
+        .dialogue {
+            background: #1E1E1E;
+            padding: 24px;
+            margin: 24px 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 8px rgba(74, 144, 226, 0.2);
+            border: 1px solid #7B1FA2;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .warning {
+            color: #4A90E2;
+            font-weight: 500;
+            margin: 20px 0;
+        }
+        .difficulty {
+            color: #D4A017;
+            font-style: italic;
+            font-weight: 300;
+        }
+        .party-reminder {
+            color: #D4A017;
+            font-weight: 500;
+            margin: 20px 0;
+        }
+        .particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #4A90E2;
+            border-radius: 50%;
+            animation: particle 2s ease-out forwards;
+            pointer-events: none;
+        }
+        @keyframes particle {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #1E1E1E;
+            padding: 12px;
+            text-align: center;
+            box-shadow: 0 -2px 4px rgba(0,0,0,0.3);
+        }
+        .activities-menu {
+            display: none;
+            background: #1E1E1E;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 1px solid #7B1FA2;
+            margin-top: 12px;
+        }
+        .activities-menu.active {
+            display: block;
+        }
+        .activities-menu button {
+            width: 100%;
+            margin-bottom: 8px;
+        }
+        .relationships-menu, .inventory-menu {
+            display: none;
+            background: #1E1E1E;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 1px solid #7B1FA2;
+            margin-top: 12px;
+        }
+        .relationships-menu.active, .inventory-menu.active {
+            display: block;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 70px 12px 70px;
+                padding: 16px;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                top: 60px;
+                z-index: 999;
+            }
+            .hamburger {
+                display: block;
+            }
+            .stats {
+                flex-direction: column;
+                align-items: center;
+            }
+            .stat-card {
+                width: 100%;
+                max-width: 240px;
+            }
+            .actions {
+                grid-template-columns: 1fr;
+            }
+            button, select, input[type="text"] {
+                width: 100%;
+                max-width: 320px;
+            }
+            .header h1 {
+                font-size: 1.2em;
+            }
+            .clock {
+                width: 20px;
+                height: 20px;
+                right: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background">
+        <div class="particles"></div>
+    </div>
+    <div class="header">
+        <i class="fas fa-bars hamburger" onclick="toggleSidebar()"></i>
+        <h1>Zindal University Life Simulator</h1>
+        <i class="fas fa-cog settings-icon" onclick="showSettings()"></i>
+    </div>
+    <div class="clock"></div>
+    <div class="sidebar" id="sidebar">
+        <a href="#" onclick="showStats()">View Stats</a>
+        <a href="#" onclick="showRelationships()">Relationships</a>
+        <a href="#" onclick="showInventory()">Inventory</a>
+        <a href="#" onclick="showAchievements()">Achievements</a>
+    </div>
+    <div class="container" id="gameContainer">
+        <div class="dashboard">
+            <div class="stats">
+                <div class="stat-card">
+                    <i class="fas fa-heart"></i> Health: <span id="health">80</span>
+                    <div class="progress progress-health"><div class="progress-bar" style="width: 80%;"></div></div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-smile"></i> Happiness: <span id="happiness">70</span>
+                    <div class="progress progress-happiness"><div class="progress-bar" style="width: 70%;"></div></div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-dollar-sign"></i> Wealth: <span id="wealth">50</span>
+                    <div class="progress progress-wealth"><div class="progress-bar" style="width: 50%;"></div></div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-book"></i> Knowledge: <span id="knowledge">60</span>
+                    <div class="progress progress-knowledge"><div class="progress-bar" style="width: 60%;"></div></div>
+                </div>
+            </div>
+            <div class="actions">
+                <button onclick="toggleActivities()">Activities</button>
+            </div>
+            <div class="activities-menu" id="activitiesMenu">
+                <button onclick="doActivity('work')">Work</button>
+                <button onclick="doActivity('socialize')">Socialize</button>
+                <button onclick="doActivity('study')">Study</button>
+                <button onclick="doActivity('rest')">Rest</button>
+                <button onclick="doActivity('djour')">D'jour</button>
+                <button onclick="toggleRelationshipsMenu()">Relationships</button>
+                <button onclick="doActivity('pickpocket')">Pickpocket</button>
+                <button onclick="doActivity('hackEmail')">Hack Professor’s Email</button>
+                <button onclick="doActivity('joinClub')">Join a Club</button>
+            </div>
+            <div class="relationships-menu" id="relationshipsMenu">
+                <button onclick="interactRelationship('callMom')">Call Mom</button>
+                <button onclick="interactRelationship('flirtCrush')">Flirt with Crush</button>
+                <button onclick="interactRelationship('sabotageRival')">Sabotage Rival</button>
+                <button onclick="interactRelationship('chatFriend')">Chat with Best Friend</button>
+                <button onclick="interactRelationship('bribeProfessor')">Bribe Professor</button>
+                <button onclick="interactRelationship('argueDad')">Argue with Dad</button>
+            </div>
+        </div>
+        <div id="screen1">
+            <div class="dialogue">
+                <p>Welcome to the Zindal University shitshow. Ready to screw up your life?</p>
+                <button onclick="startGame()">Ztart</button>
+            </div>
+        </div>
+        <div id="screen2" style="display: none;">
+            <div class="dialogue">
+                <p>You sure you wanna dive into this mess?</p>
+                <button onclick="nextScreen('screen3')">Yes</button>
+                <button onclick="nextScreen('screen3')">Exactly</button>
+            </div>
+        </div>
+        <div id="screen3" style="display: none;">
+            <div class="dialogue">
+                <p>Build your sorry self:</p>
+                <p>Age (how old before you crash and burn):</p>
+                <select id="age">
+                    <option value="18">18</option>
+                    <option value="19">19</option>
+                    <option value="20">20</option>
+                    <option value="21">21</option>
+                </select>
+                <p>Gender (pick your poison):</p>
+                <select id="gender">
+                    <option value="female">Female</option>
+                    <option value="superior">Superior</option>
+                    <option value="duppta">Duppta</option>
+                </select>
+                <p>Race (sets how much the world screws you):</p>
+                <select id="race" onchange="updateDifficulty()">
+                    <option value="light">Light Complexion</option>
+                    <option value="medium">Medium Complexion</option>
+                    <option value="dark">Dark Complexion</option>
+                    <option value="special">Can I Have One Race</option>
+                </select>
+                <p class="difficulty" id="difficulty">Difficulty: Easy</p>
+                <p>Name (what your profs will forget):</p>
+                <input type="text" id="name" placeholder="Loser McLoserface">
+                <button onclick="nextScreen('screen4')">Next</button>
+            </div>
+        </div>
+        <div id="screen4" style="display: none;">
+            <div class="dialogue">
+                <p>Pizza toppings (your only friend):</p>
+                <select id="pizza">
+                    <option value="crust">Crust on Side</option>
+                    <option value="base">Base Cheese Toppings</option>
+                    <option value="thin">Thin Crust</option>
+                    <option value="side">Side on Burst</option>
+                    <option value="pan">Pan Base</option>
+                </select>
+                <p class="warning">I'm not trying to scare you, but sambhal jao!</p>
+                <button onclick="nextScreen('screen5')">Next</button>
+            </div>
+        </div>
+        <div id="screen5" style="display: none;">
+            <div class="dialogue">
+                <p>Pick your god (they’re all disappointed):</p>
+                <select id="god">
+                    <option value="jesus">Jesus</option>
+                    <option value="allah">Allah</option>
+                    <option value="plato">Plato</option>
+                </select>
+                <p>Transport to Zindal (choose your death trap):</p>
+                <select id="transport">
+                    <option value="car">Car</option>
+                    <option value="bike">Bike</option>
+                    <option value="rickshaw">Ramani’s Rickshaw</option>
+                </select>
+                <p class="warning">Under Charter of 2025, all rules must be followed. Breach will result in spanking by Shashi Tharoor.</p>
+                <button onclick="nextScreen('screen6')">Next</button>
+            </div>
+        </div>
+        <div id="screen6" style="display: none;">
+            <div class="dialogue">
+                <p>Are we clair, or are you already clueless?</p>
+                <button onclick="nextScreen('screen7')">Yes</button>
+                <button onclick="nextScreen('screen7')">Exactly</button>
+            </div>
+        </div>
+        <div id="screen7" style="display: none;">
+            <div class="dialogue">
+                <p>Continue or wimp out?</p>
+                <button onclick="nextScreen('screen8')">Continue</button>
+                <button onclick="nextScreen('screen1')">Step Back</button>
+            </div>
+        </div>
+        <div id="screen8" style="display: none;">
+            <div class="dialogue">
+                <p>First day at Zindal University! How to blow it?</p>
+                <button onclick="nextScreen('screen9')">Bunk class (Fake UTI)</button>
+                <button onclick="nextScreen('screen10')">Go to class</button>
+            </div>
+        </div>
+        <div id="screen9" style="display: none;">
+            <div class="dialogue">
+                <p>You faked a UTI and vibed on the couch. Happiness +10, Knowledge -5, Dignity -20.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen10" style="display: none;">
+            <div class="dialogue">
+                <p>In class, what’s your move?</p>
+                <button onclick="nextScreen('screen11')">Lizzan to the lecture</button>
+                <button onclick="nextScreen('screen12')">Watch Rocky Rani Ki Prem Kahani</button>
+            </div>
+        </div>
+        <div id="screen11" style="display: none;">
+            <div class="dialogue">
+                <p>You lizzaned like a nerd. Knowledge +10, Happiness -5. Prof thinks you’re a tryhard.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen12" style="display: none;">
+            <div class="dialogue">
+                <p>Caught watching Rocky Rani. Shashi Tharoor slaps a ₹500 fine. Wealth -20, Happiness +5, Knowledge -10.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen13" style="display: none;">
+            <div class="dialogue">
+                <p id="dayOfWeek"></p>
+                <p id="partyReminder" class="party-reminder" style="display: none;">Yo, it’s Thursday! Party tonight at Green Square. You in?</p>
+                <p id="partyOption" style="display: none;"><button onclick="attendGreenSquareParty()">Crash Green Square Party</button></p>
+                <p>New day, same chaos. Random event:</p>
+                <p id="randomEvent"></p>
+                <p>What’s your next dumb move?</p>
+                <button onclick="nextScreen('screen14')">Start a pyramid scheme</button>
+                <button onclick="nextScreen('screen15')">Prank a professor</button>
+                <button onclick="nextScreen('screen16')">Join a shady frat</button>
+                <button onclick="nextScreen('screen17')">Steal cafeteria food</button>
+                <button onclick="nextScreen('screen22')">Start a campus cult</button>
+                <button onclick="nextScreen('screen23')">Blackmail a TA</button>
+            </div>
+        </div>
+        <div id="screen14" style="display: none;">
+            <div class="dialogue">
+                <p>You tricked freshers into a pyramid scheme. Wealth +50, Happiness +10, Knowledge -10. Dean’s got your number.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen15" style="display: none;">
+            <div class="dialogue">
+                <p>You slipped a whoopee cushion under Prof. Sharma. Happiness +15, Knowledge -10. He’s writing you up.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen16" style="display: none;">
+            <div class="dialogue">
+                <p>You joined a frat that worships Ramani’s rickshaw. Happiness +10, Wealth -30 (dues). They’re planning a heist.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen17" style="display: none;">
+            <div class="dialogue">
+                <p>You stole samosas from the cafeteria. Happiness +10, Health -5 (food poisoning). Added Stolen Samosa to inventory.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen18" style="display: none;">
+            <div class="dialogue">
+                <p>Midterms loom. What’s your genius plan?</p>
+                <button onclick="nextScreen('screen19')">Hack the exam system</button>
+                <button onclick="nextScreen('screen20')">Bribe a TA</button>
+                <button onclick="nextScreen('screen21')">Party and wing it</button>
+            </div>
+        </div>
+        <div id="screen19" style="display: none;">
+            <div class="dialogue">
+                <p>You hacked the system but left a digital footprint. Knowledge +15, Happiness -10, Wealth -20 (bribe to stay quiet).</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen20" style="display: none;">
+            <div class="dialogue">
+                <p>You bribed a TA with your last pizza. Knowledge +10, Wealth -30, Happiness -5 (guilt). Pizza removed from inventory.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen21" style="display: none;">
+            <div class="dialogue">
+                <p>You partied with the rickshaw gang. Happiness +20, Knowledge -20, Wealth -50 (booze). Flunked the midterm.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen22" style="display: none;">
+            <div class="dialogue">
+                <p>You started a campus cult. Happiness +20, Wealth -30, Knowledge -15. You’re now Guru Loser. Followers are sus.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+        <div id="screen23" style="display: none;">
+            <div class="dialogue">
+                <p>You blackmailed a TA for grades. Knowledge +20, Happiness -10, Wealth +30. Your soul’s in the trash.</p>
+                <button onclick="nextScreen('screen13')">Next Day</button>
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        <button onclick="triggerRandomEvent()">Next Day</button>
+    </div>
+
+    <script>
+        let player = {
+            health: 80,
+            happiness: 70,
+            wealth: 50,
+            knowledge: 60,
+            inventory: ['Laptop', 'Pizza'],
+            relationships: {
+                mom: 50,
+                dad: 40,
+                bestFriend: 30,
+                crush: 10,
+                rival: 20,
+                professor: 25
+            },
+            achievements: [],
+            ageMonths: 0
+        };
+
+        let currentDay = 0;
+        const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+        function startGame() {
+            document.getElementById('screen1').style.display = 'none';
+            document.getElementById('screen2').style.display = 'block';
+            addParticle();
+        }
+
+        function nextScreen(screenId) {
+            const container = document.getElementById('gameContainer');
+            container.style.opacity = '0';
+            setTimeout(() => {
+                for (let i = 1; i <= 23; i++) {
+                    document.getElementById(`screen${i}`).style.display = 'none';
+                }
+                document.getElementById(screenId).style.display = 'block';
+                container.style.opacity = '1';
+                updateStats();
+                addParticle();
+            }, 300);
+        }
+
+        function updateDifficulty() {
+            const race = document.getElementById('race').value;
+            const difficultyText = document.getElementById('difficulty');
+            if (race === 'light') {
+                difficultyText.textContent = 'Difficulty: Easy';
+            } else if (race === 'medium') {
+                difficultyText.textContent = 'Difficulty: Normal';
+            } else if (race === 'dark') {
+                difficultyText.textContent = 'Difficulty: Hard';
+            } else if (race === 'special') {
+                difficultyText.textContent = 'Difficulty: Mystery';
+            }
+        }
+
+        function updateStats() {
+            player.health = Math.max(0, Math.min(100, player.health));
+            player.happiness = Math.max(0, Math.min(100, player.happiness));
+            player.wealth = Math.max(0, Math.min(100, player.wealth));
+            player.knowledge = Math.max(0, Math.min(100, player.knowledge));
+            document.getElementById('health').textContent = player.health;
+            document.getElementById('happiness').textContent = player.happiness;
+            document.getElementById('wealth').textContent = player.wealth;
+            document.getElementById('knowledge').textContent = player.knowledge;
+            document.querySelector('.progress-health .progress-bar').style.width = `${player.health}%`;
+            document.querySelector('.progress-happiness .progress-bar').style.width = `${player.happiness}%`;
+            document.querySelector('.progress-wealth .progress-bar').style.width = `${player.wealth}%`;
+            document.querySelector('.progress-knowledge .progress-bar').style.width = `${player.knowledge}%`;
+            checkAchievements();
+        }
+
+        function doActivity(activity) {
+            if (activity === 'work') {
+                player.wealth += 10;
+                player.happiness -= 10;
+                player.health -= 5;
+                alert('You grinded at the campus cafe. Cash up, vibes down.');
+            } else if (activity === 'socialize') {
+                player.happiness += 15;
+                player.relationships.bestFriend += 5;
+                alert('Chilled with some weirdos. They kinda vibe with you.');
+            } else if (activity === 'study') {
+                player.knowledge += 10;
+                player.happiness -= 10;
+                alert('Crammed notes like a loser. Brain’s fried, fun’s dead.');
+            } else if (activity === 'rest') {
+                player.health += 15;
+                player.happiness += 5;
+                alert('Snoozed like a champ. You’re the king of naps.');
+            } else if (activity === 'djour') {
+                player.happiness += 20;
+                player.health -= 10;
+                player.wealth -= 15;
+                player.knowledge -= 5;
+                alert('You got smashed at D\'jour. Happiness up, brain cells down.');
+            } else if (activity === 'pickpocket') {
+                if (Math.random() < 0.7) {
+                    player.wealth += 20;
+                    alert('You snagged a wallet. Easy cash, no regrets.');
+                } else {
+                    player.health -= 15;
+                    alert('Caught pickpocketing. Got a black eye.');
+                }
+            } else if (activity === 'hackEmail') {
+                if (Math.random() < 0.6) {
+                    player.knowledge += 15;
+                    alert('Hacked Prof’s email. Got the exam key.');
+                } else {
+                    player.wealth -= 30;
+                    alert('Caught hacking. Paid a fine to avoid expulsion.');
+                }
+            } else if (activity === 'joinClub') {
+                const clubs = [
+                    { name: 'Plato Worship Club', effect: () => { player.happiness += 10; player.wealth -= 20; alert('Joined Plato Worship Club. Deep thoughts, empty wallet.'); } },
+                    { name: 'Rickshaw Racers', effect: () => { player.happiness += 15; player.health -= 10; alert('Joined Rickshaw Racers. Crashed already.'); } }
+                ];
+                const club = clubs[Math.floor(Math.random() * clubs.length)];
+                club.effect();
+            }
+            updateStats();
+            addParticle();
+        }
+
+        function interactRelationship(action) {
+            if (action === 'callMom') {
+                player.happiness += 5;
+                player.relationships.mom += 10;
+                player.wealth -= 5;
+                alert('Called Mom. She’s proud but wants money.');
+            } else if (action === 'flirtCrush') {
+                player.happiness += 10;
+                player.relationships.crush += 15;
+                player.knowledge -= 5;
+                alert('Flirted with Crush. Heart racing, brain offline.');
+            } else if (action === 'sabotageRival') {
+                player.happiness += 10;
+                player.relationships.rival -= 20;
+                player.health -= 5;
+                alert('Sabotaged Rival’s project. They’re pissed, might punch.');
+            } else if (action === 'chatFriend') {
+                player.happiness += 10;
+                player.relationships.bestFriend += 10;
+                alert('Chatted with Best Friend. They’re your ride-or-die.');
+            } else if (action === 'bribeProfessor') {
+                player.knowledge += 10;
+                player.wealth -= 20;
+                player.relationships.professor += 15;
+                alert('Bribed Professor. Grades up, morals down.');
+            } else if (action === 'argueDad') {
+                player.happiness -= 10;
+                player.relationships.dad -= 15;
+                alert('Argued with Dad. He’s cutting your allowance.');
+            }
+            updateStats();
+            addParticle();
+        }
+
+        function useItem(item) {
+            if (item === 'Fake ID') {
+                if (Math.random() < 0.8) {
+                    player.happiness += 15;
+                    player.wealth -= 10;
+                    alert('Used Fake ID at D\'jour. Partied hard.');
+                } else {
+                    player.health -= 10;
+                    alert('Bouncer caught your Fake ID. Ouch.');
+                }
+            } else if (item === 'Pizza') {
+                player.health += 10;
+                player.happiness += 5;
+                player.inventory = player.inventory.filter(i => i !== 'Pizza');
+                alert('Ate Pizza. Tasty, but now it’s gone.');
+            } else if (item === 'Party Invite') {
+                player.happiness += 20;
+                player.wealth -= 15;
+                player.knowledge -= 10;
+                player.inventory = player.inventory.filter(i => i !== 'Party Invite');
+                alert('Used Party Invite at Green Square. Epic night, no regrets.');
+            } else if (item === 'Stolen Samosa') {
+                player.health -= 5;
+                player.happiness += 5;
+                player.inventory = player.inventory.filter(i => i !== 'Stolen Samosa');
+                alert('Ate Stolen Samosa. Tasty but sketchy.');
+            }
+            updateStats();
+            addParticle();
+        }
+
+        function discardItem(item) {
+            player.inventory = player.inventory.filter(i => i !== item);
+            player.happiness -= 5;
+            alert(`Discarded ${item}. Why’d you do that?`);
+            updateStats();
+            addParticle();
+        }
+
+        function attendGreenSquareParty() {
+            player.happiness += 20;
+            player.wealth -= 15;
+            player.knowledge -= 10;
+            player.health -= 5;
+            alert('Crashed Green Square Party. Danced on a table. Viral shame.');
+            nextScreen('screen13');
+        }
+
+        function triggerRandomEvent() {
+            currentDay = (currentDay + 1) % 7;
+            player.ageMonths += currentDay === 0 ? 1 : 0;
+            document.getElementById('dayOfWeek').textContent = `It’s ${daysOfWeek[currentDay]}!`;
+            const partyReminder = document.getElementById('partyReminder');
+            const partyOption = document.getElementById('partyOption');
+            if (currentDay === 3) {
+                partyReminder.style.display = 'block';
+                partyOption.style.display = 'block';
+            } else {
+                partyReminder.style.display = 'none';
+                partyOption.style.display = 'none';
+            }
+            const events = [
+                { text: 'Your roommate spiked your pizza with laxatives. Health -20, Happiness +10 (revenge vibes).', effect: () => { player.health -= 20; player.happiness += 10; } },
+                { text: 'You slipped in the cafeteria. Viral TikTok. Happiness +10, Dignity -50.', effect: () => { player.happiness += 10; } },
+                { text: 'Ramani’s rickshaw crashed. Health -15 (you walked).', effect: () => { player.health -= 15; } },
+                { text: 'Shashi Tharoor caught you dozing. Lectures you on “obfuscation.” Knowledge +5, Happiness -20.', effect: () => { player.knowledge += 5; player.happiness -= 20; } },
+                { text: 'Crush ghosts you. Happiness -15, Crush -20.', effect: () => { player.happiness -= 15; player.relationships.crush -= 20; } },
+                { text: 'Mom sends ₹500. Wealth +20, Mom +10.', effect: () => { player.wealth += 20; player.relationships.mom += 10; } },
+                { text: 'Found a shady vape. Added to inventory.', effect: () => { player.inventory.push('Shady Vape'); } },
+                { text: 'Rival spreads rumors. Happiness -10, Rival -15.', effect: () => { player.happiness -= 10; player.relationships.rival -= 15; } }
+            ];
+            if (player.health < 20 && Math.random() < 0.3) {
+                player.wealth -= 30;
+                alert('Hospital visit. That UTI wasn’t fake anymore. Wealth -30.');
+            } else if (player.happiness < 20 && Math.random() < 0.3) {
+                player.knowledge -= 10;
+                player.health -= 10;
+                alert('Depression hits. Skipped class, ate sadness pizza.');
+            } else if (player.wealth < 20 && Math.random() < 0.3) {
+                player.happiness -= 15;
+                alert('Debt collector calls. They want your laptop.');
+            } else if (player.knowledge < 20 && Math.random() < 0.3) {
+                player.happiness -= 10;
+                player.relationships.professor -= 20;
+                alert('Academic probation. Prof’s done with you.');
+            } else {
+                const event = events[Math.floor(Math.random() * events.length)];
+                document.getElementById('randomEvent').textContent = event.text;
+                event.effect();
+            }
+            updateStats();
+            nextScreen('screen13');
+        }
+
+        function checkAchievements() {
+            if (player.ageMonths >= 1 && !player.achievements.includes('Survive a Month')) {
+                player.achievements.push('Survive a Month');
+                alert('Achievement Unlocked: Survive a Month! You’re basically a Zindal legend… or not.');
+            }
+            if (player.relationships.crush >= 100 && !player.achievements.includes('Crush Master')) {
+                player.achievements.push('Crush Master');
+                alert('Achievement Unlocked: Crush Master! They’re into you. Don’t screw it up.');
+            }
+            if (player.inventory.length >= 5 && !player.achievements.includes('Hoarder')) {
+                player.achievements.push('Hoarder');
+                alert('Achievement Unlocked: Hoarder! Your dorm’s a mess.');
+            }
+        }
+
+        function addParticle() {
+            const container = document.getElementById('gameContainer');
+            for (let i = 0; i < 3; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = `${Math.random() * container.offsetWidth}px`;
+                particle.style.top = `${Math.random() * container.offsetHeight}px`;
+                container.appendChild(particle);
+                setTimeout(() => particle.remove(), 2000);
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+
+        function toggleActivities() {
+            document.getElementById('activitiesMenu').classList.toggle('active');
+            document.getElementById('relationshipsMenu').classList.remove('active');
+        }
+
+        function toggleRelationshipsMenu() {
+            document.getElementById('relationshipsMenu').classList.toggle('active');
+        }
+
+        function showSettings() {
+            alert('Settings: Toggle sound, switch theme, or reset your pathetic life (not implemented).');
+        }
+
+        function showStats() {
+            alert(`Stats: Health=${player.health}, Happiness=${player.happiness}, Wealth=${player.wealth}, Knowledge=${player.knowledge}, Age=${18 + Math.floor(player.ageMonths / 12)} years ${player.ageMonths % 12} months`);
+        }
+
+        function showRelationships() {
+            alert(`Relationships: Mom=${player.relationships.mom} (she’s over it), Dad=${player.relationships.dad} (grumpy), Best Friend=${player.relationships.bestFriend} (ride-or-die), Crush=${player.relationships.crush} (who?), Rival=${player.relationships.rival} (hates you), Professor=${player.relationships.professor} (tolerates you)`);
+        }
+
+        function showInventory() {
+            let inventoryText = `Inventory: ${player.inventory.join(', ')} (sad stash)\n\n`;
+            player.inventory.forEach(item => {
+                inventoryText += `${item}: <button onclick="useItem('${item}')">Use</button> <button onclick="discardItem('${item}')">Discard</button>\n`;
+            });
+            alert(inventoryText); // Note: For simplicity, alert is used. In a full implementation, a modal with buttons would be better.
+        }
+
+        function showAchievements() {
+            alert(`Achievements: ${player.achievements.length > 0 ? player.achievements.join(', ') : 'None. Step it up.'}`);
+        }
+
+        function restartGame() {
+            player = {
+                health: 80,
+                happiness: 70,
+                wealth: 50,
+                knowledge: 60,
+                inventory: ['Laptop', 'Pizza'],
+                relationships: {
+                    mom: 50,
+                    dad: 40,
+                    bestFriend: 30,
+                    crush: 10,
+                    rival: 20,
+                    professor: 25
+                },
+                achievements: [],
+                ageMonths: 0
+            };
+            currentDay = 0;
+            updateStats();
+            nextScreen('screen1');
+        }
+    </script>
+</body>
+</html>
